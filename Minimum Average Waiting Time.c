@@ -14,7 +14,7 @@ char* ltrim(char*);
 char* rtrim(char*);
 char** split_string(char*);
 
-int parse_int(char*);
+long parse_long(char*);  // FIX 6: use long parser instead of int
 
 /* ---------- Heap Structure ---------- */
 
@@ -85,7 +85,8 @@ int cmpArrival(const void *a, const void *b) {
  * Complete the 'minimumAverage' function below.
  */
 
-int minimumAverage(int customers_rows, int customers_columns, int** customers) {
+// FIX 1: return type changed from int to long to prevent overflow
+long minimumAverage(int customers_rows, int customers_columns, long** customers) {
 
     int n = customers_rows;
 
@@ -93,7 +94,7 @@ int minimumAverage(int customers_rows, int customers_columns, int** customers) {
 
     for (int i = 0; i < n; i++) {
         arr[i].arrival = customers[i][0];
-        arr[i].cook = customers[i][1];
+        arr[i].cook    = customers[i][1];
     }
 
     qsort(arr, n, sizeof(Customer), cmpArrival);
@@ -102,13 +103,14 @@ int minimumAverage(int customers_rows, int customers_columns, int** customers) {
     int heapSize = 0;
 
     long currentTime = 0;
-    long totalWait = 0;
+    long totalWait   = 0;
 
     int i = 0;
 
     while (i < n || heapSize > 0) {
 
-        if (heapSize == 0 && currentTime < arr[i].arrival)
+        // FIX 2: added i < n guard before accessing arr[i] to prevent out-of-bounds read
+        if (heapSize == 0 && i < n && currentTime < arr[i].arrival)
             currentTime = arr[i].arrival;
 
         while (i < n && arr[i].arrival <= currentTime) {
@@ -119,12 +121,13 @@ int minimumAverage(int customers_rows, int customers_columns, int** customers) {
         Customer c = extract_min(heap, &heapSize);
 
         currentTime += c.cook;
-        totalWait += currentTime - c.arrival;
+        totalWait   += currentTime - c.arrival;
     }
 
     free(heap);
     free(arr);
 
+    // FIX 4: return type is now long, no truncation
     return totalWait / n;
 }
 
@@ -132,24 +135,30 @@ int main()
 {
     FILE* fptr = fopen(getenv("OUTPUT_PATH"), "w");
 
-    int n = parse_int(ltrim(rtrim(readline())));
+    int n = (int)parse_long(ltrim(rtrim(readline())));
 
-    int** customers = malloc(n * sizeof(int*));
+    // FIX 6: use long** so input values are stored as long end-to-end
+    long** customers = malloc(n * sizeof(long*));
 
     for (int i = 0; i < n; i++) {
-        *(customers + i) = malloc(2 * sizeof(int));
+        customers[i] = malloc(2 * sizeof(long));
 
         char** customers_item_temp = split_string(rtrim(readline()));
 
         for (int j = 0; j < 2; j++) {
-            int customers_item = parse_int(*(customers_item_temp + j));
-            *(*(customers + i) + j) = customers_item;
+            customers[i][j] = parse_long(customers_item_temp[j]);
         }
+
+        free(customers_item_temp);  // free the split array each row
     }
 
-    int result = minimumAverage(n, 2, customers);
+    long result = minimumAverage(n, 2, customers);
 
-    fprintf(fptr, "%d\n", result);
+    fprintf(fptr, "%ld\n", result);
+
+    // FIX 3: free every row then the outer array - no more memory leak
+    for (int i = 0; i < n; i++) free(customers[i]);
+    free(customers);
 
     fclose(fptr);
 
@@ -160,13 +169,13 @@ int main()
 
 char* readline() {
     size_t alloc_length = 1024;
-    size_t data_length = 0;
+    size_t data_length  = 0;
 
     char* data = malloc(alloc_length);
 
     while (true) {
         char* cursor = data + data_length;
-        char* line = fgets(cursor, alloc_length - data_length, stdin);
+        char* line   = fgets(cursor, alloc_length - data_length, stdin);
 
         if (!line)
             break;
@@ -181,6 +190,12 @@ char* readline() {
 
         if (!data)
             break;
+    }
+
+    // FIX 5: guard against data_length == 0 (EOF on first read) to avoid data[-1]
+    if (data_length == 0) {
+        free(data);
+        return NULL;
     }
 
     if (data[data_length - 1] == '\n')
@@ -203,8 +218,8 @@ char* rtrim(char* str) {
 
 char** split_string(char* str) {
     char** splits = NULL;
-    char* token = strtok(str, " ");
-    int spaces = 0;
+    char*  token  = strtok(str, " ");
+    int    spaces = 0;
 
     while (token) {
         splits = realloc(splits, sizeof(char*) * ++spaces);
@@ -215,9 +230,10 @@ char** split_string(char* str) {
     return splits;
 }
 
-int parse_int(char* str) {
+// FIX 6: parse_long replaces parse_int so large values aren't truncated on input
+long parse_long(char* str) {
     char* endptr;
-    int value = strtol(str, &endptr, 10);
+    long value = strtol(str, &endptr, 10);
 
     if (endptr == str || *endptr != '\0')
         exit(EXIT_FAILURE);
